@@ -2,53 +2,94 @@ import numpy as np
 import cv2 as cv
 import sys
 from matplotlib import pyplot as plt
-import assessment
+import assessment as assess
+import nibabel as nib
 
 ## Daily Pictures (ExDark)
 # https://github.com/cs-chan/Exclusively-Dark-Image-Dataset
 # 
 ## Underwater Dataset (EUVP)
 # https://irvlab.cs.umn.edu/resources/euvp-dataset
-
+#
+## UIEB Challenging Dataset
+#
+#
+## Non-contrast CT 
+# https://www.ucalgary.ca/labs/miplab/downloads
+# https://medpix.nlm.nih.gov/case?id=e6a1b9d9-3a26-463d-8764-b09a90186466
 
 def main():
+  ## Read Images
   try:
     path = "images/"+sys.argv[1]
-  except:
-    path = "images/15045.png"
-  
-  
-  if len(sys.argv) == 2: ## Gray-Scaled
-    img = cv.imread(path, cv.IMREAD_GRAYSCALE)
-    qdhe_img = qdhe(img)
-    
-  elif len(sys.argv) == 3: ## RGB
+    dc, filetype = path.split('.')
     img = cv.imread(path)
-    b,g,r = cv.split(img)
-    
-    ## QDHE
-    qdhe_r = qdhe(r, display='off')
-    qdhe_g = qdhe(g, display='off')
-    qdhe_b = qdhe(b, display='off')
-    qdhe_img = cv.merge((qdhe_b, qdhe_g, qdhe_r))
+  except:
+    path = "images/miplab-ncct_sym_brain.nii"
+  
+  ## Normal Image Filetypes
+  if filetype in ["jpg", "jpeg", "png"]:
+    if img.ndim == 2 or sys.argv[2] == 'gray': # Gray Scale
+      print("------- GRAY MODE -------")
+      img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+      img = img[:,:,np.newaxis]
+      ch = 1      
+    elif img.ndim == 3 or sys.argv[2] == 'rgb': ## RGB
+      print("------- RGB MODE -------")
+      img = cv.cvtColor(img, cv.COLOR_BGR2RGB)
+      ch = 3
 
-    ## Conventional Histogram Equilization    
-    he_r = cv.equalizeHist(r)
-    he_g = cv.equalizeHist(g)
-    he_b = cv.equalizeHist(b)
-    he_img = cv.merge((he_b, he_g, he_r))
-    
-    ## CLANE
-    clahe = cv.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-    clahe_r = clahe.apply(r)
-    clahe_g = clahe.apply(g)
-    clahe_b = clahe.apply(b)
-    clahe_img = cv.merge((clahe_b, clahe_g, clahe_r))
-    
-    
-    plt.figure(figsize=(8, 6))
-    displayImage(img, qdhe_img)
+  ## Medical Image Filetype
+  elif filetype == "nii": # Medical
+    print("------- Medical Image .nii --------")
+    med_images = nib.load(path).get_fdata()
+    h, w, num = med_images.shape
+    img = med_images[:,:,num//2]
+    img = img[:,:,np.newaxis]
+    ch = 1
+    plt.imshow(img)
     plt.show()
+    
+
+  ## Allocate memory for images
+  qdhe_img = np.zeros_like(img, dtype=np.uint8)
+  he_img = np.zeros_like(img, dtype=np.uint8)
+  clahe_img = np.zeros_like(img, dtype=np.uint8)
+  clahe = cv.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+  
+  ## QDHE
+  for i in range(ch):
+    qdhe_img[:,:,i] = qdhe(img[:,:,i], debug=True)
+    he_img[:,:,i] = cv.equalizeHist(img[:,:,i])
+    clahe_img[:,:,i] = clahe.apply(img[:,:,i])
+    
+    
+  ## Show Images
+  plt.figure(figsize=(8, 6))
+  displayImage(img, qdhe_img, he_img, clahe_img)
+  plt.show()
+  
+  #################### ASSESSMENT PART #####################
+  # # AMBE Assessment
+  # qdhe_ambe = assess.ambe(img, qdhe_img)
+  # he_ambe = assess.ambe(img, he_img)
+  # clahe_ambe = assess.ambe(img, clahe_img)
+  # print(qdhe_ambe, he_ambe, clahe_ambe)
+    
+  # # Entropy Assessment
+  # original_entropy = assess.entropy(img)
+  # qdhe_entropy = assess.entropy(qdhe_img)
+  # he_entropy = assess.entropy(he_img)
+  # clahe_entropy = assess.entropy(clahe_img)
+  # print(original_entropy, qdhe_entropy, he_entropy, clahe_entropy)
+  
+  # # Contrast Assessment
+  # original_contrast = assess.contrast(img)
+  # qdhe_contrast = assess.contrast(qdhe_img)
+  # he_contrast = assess.contrast(he_img)
+  # clahe_constrast = assess.contrast(clahe_img)
+  # print(original_contrast, qdhe_contrast, clahe_img)
+    
 
   return qdhe_img
 
@@ -56,18 +97,14 @@ def main():
 ## plot [0 255] histogram from image
 def pltHist(im):
   plt.bar(np.arange(256), cv.calcHist([im.astype(np.uint8)], [0], None, [256], [0, 256]).flatten())
+
   
 def displayImage(input, output, he_img=None, clahe_img=None):
-  if len(sys.argv) == 3:
-    print("RGB Mode")
+  if sys.argv[2] == 'rgb':
+    print("cmap = None")
     cmap = None
-    input = cv.cvtColor(input.astype(np.uint8), cv.COLOR_BGR2RGB)
-    output = cv.cvtColor(output.astype(np.uint8), cv.COLOR_BGR2RGB)
-    if he_img is not None:
-      he_img = cv.cvtColor(he_img.astype(np.uint8), cv.COLOR_BGR2RGB)
-    if clahe_img is not None:
-      clahe_img = cv.cvtColor(clahe_img.astype(np.uint8), cv.COLOR_BGR2RGB)
   else:
+    print("cmap = gray")
     cmap ='gray'
     
   plt.subplot(2, 4, 1)
@@ -79,14 +116,14 @@ def displayImage(input, output, he_img=None, clahe_img=None):
   plt.title('Input Image Histogram')
 
   plt.subplot(2, 4, 2)
-  plt.imshow(output, vmin=0, vmax=255)
+  plt.imshow(output, cmap=cmap, vmin=0, vmax=255)
   plt.title('QDHE Image')
   plt.axis('off')
   plt.subplot(2, 4, 6)
   pltHist(output)
   plt.title('QDHE Histogram')
   
-  if he_img != None:
+  if he_img.any() != None:
     plt.subplot(2, 4, 3)
     plt.imshow(he_img, vmin=0, vmax=255)
     plt.title('HE Image')
@@ -95,7 +132,7 @@ def displayImage(input, output, he_img=None, clahe_img=None):
     pltHist(he_img)
     plt.title('HE Histogram')
   
-  if clahe_img != None:
+  if clahe_img.any() != None:
     plt.subplot(2, 4, 4)
     plt.imshow(clahe_img, vmin=0, vmax=255)
     plt.title('CLAHE Image')
@@ -108,11 +145,11 @@ def displayImage(input, output, he_img=None, clahe_img=None):
 
 
 ## Input one channel of image, either gray, red, green, or blue
-def qdhe(img, display='on', debug = False):
+def qdhe(img, debug_display=False, debug = False):
   hist = cv.calcHist([img], [0], None, [256], [0, 256]).flatten().astype(int)
   n = np.sum(hist, dtype=int)
   img_array = np.sort(img.flatten())
-  
+
   ## Sub histogram partition
   m = np.zeros(5, dtype=int)
   m[0] = img_array[0]
@@ -124,6 +161,8 @@ def qdhe(img, display='on', debug = False):
   ## Clipping
   tc = n // 256
   clipped_hist = np.minimum(hist, tc)
+  print(clipped_hist)
+  
     
   ## Calculate histogram equalization mapping
   span = np.diff(m)
@@ -132,20 +171,6 @@ def qdhe(img, display='on', debug = False):
   new_m[-1] = 255
   normalized_cdf = np.zeros(256)
   map_ = np.zeros(256, dtype=int)
- 
-  ## Allocate clipped data
-  for i in range(4):
-    clipped_cdf = np.cumsum(clipped_hist[m[i]:m[i+1]])
-    normalized_cdf[m[i]:m[i+1]] = clipped_cdf / clipped_cdf[-1]
-    map_[m[i]:m[i+1]] = range_[i] * normalized_cdf[m[i]:m[i+1]] + new_m[i]
-
-  # Fix overexposure spots
-  max_idx = np.argmax(map_)
-  map_[max_idx:] = 255
-
-  # Histogram equalization
-  QDHE_img = map_[img]
-  
   
   ## DEBUG
   if debug:
@@ -154,9 +179,25 @@ def qdhe(img, display='on', debug = False):
     print("range:", range_)
     print("New Thresholds:", new_m)
   
+  ## Allocate clipped data
+  for i in range(4):
+    clipped_cdf = np.cumsum(clipped_hist[m[i]:m[i+1]])
+    try:
+      normalized_cdf[m[i]:m[i+1]] = clipped_cdf / clipped_cdf[-1]
+    except IndexError:
+      normalized_cdf[m[i]:m[i+1]] = 0
+    map_[m[i]:m[i+1]] = range_[i] * normalized_cdf[m[i]:m[i+1]] + new_m[i]
+
+  # Fix overexposure spots
+  max_idx = np.argmax(map_)
+  map_[max_idx:] = 255
+
+  # Histogram equalization
+  QDHE_img = map_[img]
+ 
   
   ## Plot image
-  if display == 'on':
+  if debug_display:
     plt.figure(figsize=(8, 6))
 
     displayImage(img, QDHE_img)
@@ -171,8 +212,8 @@ def qdhe(img, display='on', debug = False):
     plt.axhline(y = tc, linestyle='--', color="b", lw = "0.5")
     plt.show()    
     
-    plt.step(np.arange(256), map_)
-    plt.show()
+    # plt.step(np.arange(256), map_)
+    # plt.show()
         
   return QDHE_img
 
