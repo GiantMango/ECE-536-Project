@@ -14,8 +14,7 @@ import nibabel as nib
 ## UIEB Challenging Dataset
 #
 #
-## Non-contrast CT 
-# https://www.ucalgary.ca/labs/miplab/downloads
+## Medical Images from MedPix
 # https://medpix.nlm.nih.gov/case?id=e6a1b9d9-3a26-463d-8764-b09a90186466
 
 def main():
@@ -59,7 +58,7 @@ def main():
   
   ## QDHE
   for i in range(ch):
-    qdhe_img[:,:,i] = qdhe(img[:,:,i], debug=True)
+    qdhe_img[:,:,i] = qdhe(img[:,:,i])
     he_img[:,:,i] = cv.equalizeHist(img[:,:,i])
     clahe_img[:,:,i] = clahe.apply(img[:,:,i])
     
@@ -99,47 +98,55 @@ def pltHist(im):
   plt.bar(np.arange(256), cv.calcHist([im.astype(np.uint8)], [0], None, [256], [0, 256]).flatten())
 
   
-def displayImage(input, output, he_img=None, clahe_img=None):
+def displayImage(input, output, he_img=None, clahe_img=None, showHist=False):
   if sys.argv[2] == 'rgb':
     print("cmap = None")
     cmap = None
   else:
     print("cmap = gray")
     cmap ='gray'
+  
+  r = 1
+  if showHist:
+    r = 2
     
-  plt.subplot(2, 4, 1)
+  plt.subplot(r, 4, 1)
   plt.imshow(input, cmap=cmap)
   plt.title('Original Image')
   plt.axis('off')
-  plt.subplot(2, 4, 5)
-  pltHist(input)
-  plt.title('Input Image Histogram')
+  if showHist:
+    plt.subplot(2, 4, 5)
+    pltHist(input)
+    plt.title('Input Image Histogram')
 
-  plt.subplot(2, 4, 2)
+  plt.subplot(r, 4, 2)
   plt.imshow(output, cmap=cmap, vmin=0, vmax=255)
   plt.title('QDHE Image')
   plt.axis('off')
-  plt.subplot(2, 4, 6)
-  pltHist(output)
-  plt.title('QDHE Histogram')
+  if showHist:
+    plt.subplot(2, 4, 6)
+    pltHist(output)
+    plt.title('QDHE Histogram')
   
   if he_img.any() != None:
-    plt.subplot(2, 4, 3)
+    plt.subplot(r, 4, 3)
     plt.imshow(he_img, vmin=0, vmax=255)
     plt.title('HE Image')
     plt.axis('off')
-    plt.subplot(2, 4, 7)
-    pltHist(he_img)
-    plt.title('HE Histogram')
+    if showHist:
+      plt.subplot(2, 4, 7)
+      pltHist(he_img)
+      plt.title('HE Histogram')
   
   if clahe_img.any() != None:
-    plt.subplot(2, 4, 4)
+    plt.subplot(r, 4, 4)
     plt.imshow(clahe_img, vmin=0, vmax=255)
     plt.title('CLAHE Image')
     plt.axis('off')
-    plt.subplot(2, 4, 8)
-    pltHist(clahe_img)
-    plt.title('CLAHE Histogram')
+    if showHist:
+      plt.subplot(2, 4, 8)
+      pltHist(clahe_img)
+      plt.title('CLAHE Histogram')
 
   plt.tight_layout()
 
@@ -161,8 +168,6 @@ def qdhe(img, debug_display=False, debug = False):
   ## Clipping
   tc = n // 256
   clipped_hist = np.minimum(hist, tc)
-  print(clipped_hist)
-  
     
   ## Calculate histogram equalization mapping
   span = np.diff(m)
